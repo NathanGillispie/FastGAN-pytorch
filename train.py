@@ -1,3 +1,4 @@
+from pickle import FALSE
 import torch
 from torch import nn
 import torch.optim as optim
@@ -9,7 +10,7 @@ from torchvision import utils as vutils
 import argparse
 import random
 from tqdm import tqdm
-
+import os
 from models import weights_init, Discriminator, Generator
 from operation import copy_G_params, load_params, get_dir
 from operation import ImageFolder, InfiniteSamplerWrapper
@@ -49,7 +50,6 @@ def train_d(net, data, label="real"):
         err = F.relu( torch.rand_like(pred) * 0.2 + 0.8 + pred).mean()
         err.backward()
         return pred.mean().item()
-        
 
 def train(args):
 
@@ -63,11 +63,11 @@ def train(args):
     nz = 256
     nlr = 0.0002
     nbeta1 = 0.5
-    use_cuda = True
-    multi_gpu = True
-    dataloader_workers = 8
-    current_iteration = 0
-    save_interval = 100
+    use_cuda = False
+    multi_gpu = False       
+    dataloader_workers = 3
+    current_iteration = args.start_iter
+    save_interval = 10
     saved_model_folder, saved_image_folder = get_dir(args)
     
     device = torch.device("cpu")
@@ -112,6 +112,9 @@ def train(args):
 
     fixed_noise = torch.FloatTensor(8, nz).normal_(0, 1).to(device)
     
+    optimizerG = optim.Adam(netG.parameters(), lr=nlr, betas=(nbeta1, 0.999))
+    optimizerD = optim.Adam(netD.parameters(), lr=nlr, betas=(nbeta1, 0.999))
+
     if checkpoint != 'None':
         ckpt = torch.load(checkpoint)
         netG.load_state_dict(ckpt['g'])
@@ -121,13 +124,6 @@ def train(args):
         optimizerD.load_state_dict(ckpt['opt_d'])
         current_iteration = int(checkpoint.split('_')[-1].split('.')[0])
         del ckpt
-        
-    if multi_gpu:
-        netG = nn.DataParallel(netG.to(device))
-        netD = nn.DataParallel(netD.to(device))
-
-    optimizerG = optim.Adam(netG.parameters(), lr=nlr, betas=(nbeta1, 0.999))
-    optimizerD = optim.Adam(netD.parameters(), lr=nlr, betas=(nbeta1, 0.999))
     
     for iteration in tqdm(range(current_iteration, total_iterations+1)):
         real_image = next(dataloader)
@@ -185,18 +181,20 @@ def train(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='region gan')
-
-    parser.add_argument('--path', type=str, default='../lmdbs/art_landscape_1k', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
-    parser.add_argument('--cuda', type=int, default=0, help='index of gpu to use')
-    parser.add_argument('--name', type=str, default='test1', help='experiment name')
-    parser.add_argument('--iter', type=int, default=50000, help='number of iterations')
-    parser.add_argument('--start_iter', type=int, default=0, help='the iteration to start training')
-    parser.add_argument('--batch_size', type=int, default=8, help='mini batch number of images')
-    parser.add_argument('--im_size', type=int, default=1024, help='image resolution')
-    parser.add_argument('--ckpt', type=str, default='None', help='checkpoint weight path if have one')
-
-
+    parser.add_argument('--path', type=str, default='C:/Users/natha/datasets/TornadoGAN', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
+    parser.add_argument('--cuda', type=int, default=1, help='index of gpu to use')
+    parser.add_argument('--name', type=str, default='TornadoGAN', help='experiment name')
+    parser.add_argument('--iter', type=int, default=25500, help='number of iterations')
+    parser.add_argument('--start_iter', type=int, default=15500, help='the iteration to start training')
+    parser.add_argument('--batch_size', type=int, default=1, help='mini batch number of images')
+    parser.add_argument('--im_size', type=int, default=512, help='image resolution')
+    parser.add_argument('--ckpt', type=str, help='checkpoint weight path if have one')
     args = parser.parse_args()
-    print(args)
 
+    if args.ckpt is None:
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
+        args.ckpt = dir + os.listdir(dir)[-1]
+        print('warning: ckpt is defaulting to ' + args.ckpt)
+    assert os.path.exists(args.ckpt), 'checkpoint path does not exist'
+    print(args)
     train(args)

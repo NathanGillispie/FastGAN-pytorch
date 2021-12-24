@@ -1,5 +1,5 @@
 import torch
-from torch import nn, real, select
+from torch import nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data.dataloader import DataLoader
@@ -71,7 +71,7 @@ def train(args):
     nbeta1 = 0.5
     use_cuda = True
     multi_gpu = False
-    dataloader_workers = 3
+    dataloader_workers = 4
     current_iteration = 0
     save_interval = 3
     saved_model_folder, saved_image_folder = get_dir(args)
@@ -88,36 +88,32 @@ def train(args):
         ]
     trans = transforms.Compose(transform_list)
     
-    dataset = ImageFolder(root=data_root, transform=trans, return_idx=True)
+    dataset = ImageFolder(root=data_root, transform=trans)
     dataloader = iter(DataLoader(dataset, batch_size=batch_size, shuffle=False,
                       sampler=InfiniteSamplerWrapper(dataset), num_workers=dataloader_workers, pin_memory=True))
 
-    total_iterations = int(len(dataset)*100/batch_size)
+
     
     netG = Generator(ngf=ngf, nz=nz, im_size=im_size)
 
-    # if 'g_ema' not in ckpt:
-    #     ckpt['g_ema'] = None
     
     ckpt = torch.load(checkpoint)
     load_params( netG , ckpt['g_ema'] )
     #netG.eval()
     netG.to(device)
 
-    fixed_noise = torch.randn(len(dataset), nz, requires_grad=True, device=device)
+    fixed_noise = torch.randn(batch_size, nz, requires_grad=True, device=device)
     optimizerG = optim.Adam([fixed_noise], lr=0.1, betas=(nbeta1, 0.999))
+    
+    real_image = next(dataloader).to(device)
 
     log_rec_loss = 0
 
-
     for iteration in tqdm(range(current_iteration, total_iterations+1)):
-        real_image, noise_idx = next(dataloader)
-        real_image = real_image.to(device)
-
+        
         optimizerG.zero_grad()
         
-        select_noise = fixed_noise[noise_idx]
-        g_image = netG(select_noise)[0]
+        g_image = netG(fixed_noise)[0]
 
         rec_loss = percept( F.avg_pool2d( g_image, 2, 2), F.avg_pool2d(real_image,2,2) ).sum() + 0.2*F.mse_loss(g_image, real_image)
 
@@ -131,44 +127,30 @@ def train(args):
             print("lpips loss g: %.5f"%(log_rec_loss/100))
             log_rec_loss = 0
 
-        if iteration % (save_interval*10) == 0:
+        if iteration % (save_interval*2) == 0:
             
             with torch.no_grad():
                 vutils.save_image( torch.cat([
-                        real_image, g_image]).add(1).mul(0.5), saved_image_folder+'/rec_%d.jpg'%iteration , nrow=batch_size)
+                        real_image, g_image]).add(1).mul(0.5), saved_image_folder+'/rec_%d.jpg'%iteration )
 
                 interpolate(fixed_noise[0], fixed_noise[1], netG, saved_image_folder+'/interpolate_0_1_%d.jpg'%iteration)
         
-        if iteration % (save_interval*10) == 0 or iteration == total_iterations:
+        if iteration % (save_interval*5) == 0 or iteration == total_iterations:
             torch.save(fixed_noise, saved_model_folder+'/%d.pth'%iteration)
             
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=dataloader_workers, pin_memory=True)
-    
-    mean_lpips = 0
-    for idx, data in enumerate(dataloader):
-        real_image, noise_idx = data
-        real_image = real_image.to(device)
 
-        select_noise = fixed_noise[noise_idx]
-        g_image = netG(select_noise)[0]
-
-        rec_loss = percept( F.avg_pool2d( g_image, 2, 2), F.avg_pool2d(real_image,2,2) ).sum() 
-        mean_lpips += rec_loss.sum()
-    mean_lpips /= len(dataset)
-    print(mean_lpips)
-    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='region gan')
 
-    parser.add_argument('--path', type=str, default='../lmdbs/art_landscape_1k', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
+    parser.add_argument('--path', type=str, default='./groundtruth', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
     parser.add_argument('--cuda', type=int, default=0, help='index of gpu to use')
     parser.add_argument('--name', type=str, default='test1', help='experiment name')
-    parser.add_argument('--iter', type=int, default=50000, help='number of iterations')
+    parser.add_argument('--iter', type=int, default=100, help='number of iterations')
     parser.add_argument('--start_iter', type=int, default=0, help='the iteration to start training')
-    parser.add_argument('--batch_size', type=int, default=4, help='mini batch number of images')
-    parser.add_argument('--im_size', type=int, default=1024, help='image resolution')
-    parser.add_argument('--ckpt', type=str, default='None', help='checkpoint weight path')
+    parser.add_argument('--batch_size', type=int, default=2, help='mini batch number of images')
+    parser.add_argument('--im_size', type=int, default=512, help='image resolution')
+    parser.add_argument('--ckpt', type=str, default='./train_results/TornadoGAN/models/450.pth', help='checkpoint weight path')
 
 
     args = parser.parse_args()

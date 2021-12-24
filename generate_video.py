@@ -30,7 +30,8 @@ def interpolate(z1, z2, num_interp):
         interp_zs.append( (z2*w[n].item() + z1*(1-w[n].item())).unsqueeze(0) )
     return torch.cat(interp_zs)
 
-
+def seed2vec(G, seed):
+  return np.random.RandomState(seed).randn(1, G.z_dim)
 
 def interpolate_ease_inout(z1, z2, num_interp, ease_fn, model_type='freeform'):
     # this is a "first frame included, last frame excluded" interpolation
@@ -76,7 +77,7 @@ def net_generate(netG, z, model_type='freeform', im_size=1024):
 
     return torch.nn.functional.interpolate(gimg, im_size)
 
-def batch_generate_and_save(netG, zs, folder_name, batch_size=8, model_type='freeform', im_size=1024):
+def batch_generate_and_save(netG, zs, folder_name, batch_size=1, model_type='freeform', im_size=1024):
     # zs is a list of vectors if model is freeform
     # zs is a list of lists, each list is 2 vectors, if model is stylegan
     t = 0
@@ -159,31 +160,37 @@ def make_video_from_latents(net, selected_latents, frames_dist_folder, video_nam
     
 
     print('generating images ...')
-    batch_generate_and_save(net, main_zs, folder_name=frames_dist_folder, batch_size=8, model_type=model_type, im_size=im_size)
+    batch_generate_and_save(net, main_zs, folder_name=frames_dist_folder, batch_size=2, model_type=model_type, im_size=im_size)
     print('making videos ...')
     read_img_and_make_video(frames_dist_folder, video_name, fps=fps)
 
 
 if __name__ == "__main__":
-
-
-    device = torch.device('cuda:%d'%(0))
-
-    load_model_err = 0
+    device = torch.device('cuda')
 
     from models import Generator as Generator_freeform
     
-    frames_dist_folder = 'project_video_frames' # a folder to save generated images
-    ckpt_path = './time_1024_1/models/180000.pth' # path to the checkpoint
-    video_name = 'videl_keyframe_15'  # name of the generated video
+    frames_dist_folder = 'generated_video_frames' # a folder to save generated images
+    
+    dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
+    ckpt_path = dir + os.listdir(dir)[-1]
+    print('checkpoint path is ' + ckpt_path)
+    assert os.path.exists(ckpt_path), 'path does not exist'
+
+    video_name = 'generated_video'  # name of the generated video
 
     model_type = 'freeform'
-    net = Generator_freeform(ngf=64, nz=100)
-    net.load_state_dict(torch.load(ckpt_path)['g'])
+    net = Generator_freeform(ngf=64, nz=256, nc=3, im_size=512)
+
+    ### replaced this line with next three from eval.py
+    # net.load_state_dict(torch.load(ckpt_path)['g'])
+    checkpoint = torch.load(ckpt_path, map_location=lambda a,b: a)
+    checkpoint['g'] = {k.replace('module.', ''): v for k, v in checkpoint['g'].items()}
+    net.load_state_dict(checkpoint['g'])
+
     net.to(device)
     net.eval()
 
-    
     try:
         rmtree(frames_dist_folder)
     except:
@@ -192,15 +199,17 @@ if __name__ == "__main__":
 
     fps = 30
     minutes = 1
-    im_size = 1024
+    im_size = 512
     
     ease_fn=ease_fn_dict['SineEaseInOut']
 
-    init_kf_nbr = 15
-    nbr_key_frames_per_minute = [init_kf_nbr-i for i in range(minutes)]
+    init_kf_nbr = 2
+    nbr_key_frames_per_minute = [init_kf_nbr - i for i in range(minutes)]
     nbr_key_frames_total = sum(nbr_key_frames_per_minute)
-    noises = torch.randn( nbr_key_frames_total , 100).to(device)
+    noises = torch.randn(nbr_key_frames_total , 256).to(device)
     user_selected_noises = [n for n in noises]
+    ##INSERT MY OWN NOISES HERE
+
     nbr_interpolation_list = [[fps*60//nbr_kf]*nbr_kf for nbr_kf in nbr_key_frames_per_minute]
     nbl = []
     for nb in nbr_interpolation_list:
@@ -215,7 +224,6 @@ if __name__ == "__main__":
     for idx in range(100):
         main_zs.append(main_zs[-1])
     print('generating images ...')
-    batch_generate_and_save(net, main_zs, folder_name=frames_dist_folder, batch_size=8, model_type=model_type, im_size=im_size)
+    batch_generate_and_save(net, main_zs, folder_name=frames_dist_folder, batch_size=1, model_type=model_type, im_size=im_size)
     print('making videos ...')
     read_img_and_make_video(frames_dist_folder, video_name, fps=fps)
-

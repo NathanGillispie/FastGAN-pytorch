@@ -1,3 +1,6 @@
+# training results (they are far to large for my low bandwidth connection and change far too often as well
+training_results/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

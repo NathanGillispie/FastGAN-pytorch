@@ -67,6 +67,7 @@ if __name__ == '__main__':
     parser.add_argument('--path_b', type=str)
     parser.add_argument('--iter', type=int, default=3)
     parser.add_argument('--end', type=int, default=13)
+    parser.add_argument('--num_workers', type=int, default=3)
 
     args = parser.parse_args()
 
@@ -82,7 +83,7 @@ if __name__ == '__main__':
     )
 
     dset_a = ImageFolder(args.path_a, transform)
-    loader_a = DataLoader(dset_a, batch_size=args.batch, num_workers=4)
+    loader_a = DataLoader(dset_a, batch_size=args.batch, num_workers=args.num_workers)
 
     features_a = extract_features(loader_a, inception, device).numpy()
     print(f'extracted {features_a.shape[0]} features')
@@ -96,7 +97,7 @@ if __name__ == '__main__':
         if os.path.exists(os.path.join( args.path_b, folder )):
             print(folder)
             dset_b = ImageFolder( os.path.join( args.path_b, folder ), transform)
-            loader_b = DataLoader(dset_b, batch_size=args.batch, num_workers=4)
+            loader_b = DataLoader(dset_b, batch_size=args.batch, num_workers=args.num_workers)
 
             features_b = extract_features(loader_b, inception, device).numpy()
             print(f'extracted {features_b.shape[0]} features')

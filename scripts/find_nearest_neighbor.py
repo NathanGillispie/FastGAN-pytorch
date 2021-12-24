@@ -1,4 +1,4 @@
-from eval import load_params
+from generate import load_params
 import torch
 from torch import nn
 from torch import optim
