@@ -70,15 +70,14 @@ def train(args):
     nlr = 0.0002
     nbeta1 = 0.5
     use_cuda = True
-    multi_gpu = False
-    dataloader_workers = 8
+    dataloader_workers = 3
     current_iteration = 0
-    save_interval = 100
+    save_interval = 10
     saved_model_folder, saved_image_folder = get_dir(args)
     
     device = torch.device("cpu")
     if use_cuda:
-        device = torch.device("cuda:0")
+        device = torch.device("cuda")
 
     transform_list = [
             transforms.Resize((int(im_size),int(im_size))),

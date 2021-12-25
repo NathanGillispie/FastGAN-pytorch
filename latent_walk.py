@@ -1,14 +1,13 @@
-from easing_functions.easing import LinearInOut
-import torch
-import pandas as pd 
-from torchvision import utils as vutils
 import os
+import torch 
+from torchvision import utils as vutils
 import cv2
 from tqdm import tqdm
-from scipy import io
 import numpy as np
-import argparse
+import click
+#import pandas as pd
 
+from easing_functions.easing import LinearInOut
 from easing_functions import QuadEaseInOut
 from easing_functions import SineEaseIn, SineEaseInOut, SineEaseOut
 from easing_functions import ElasticEaseIn, ElasticEaseInOut, ElasticEaseOut
@@ -30,15 +29,15 @@ def interpolate(z1, z2, num_interp):
         interp_zs.append( (z2*w[n].item() + z1*(1-w[n].item())).unsqueeze(0) )
     return torch.cat(interp_zs)
 
-def seed2vec(G, seed):
-  return np.random.RandomState(seed).randn(1, G.z_dim)
+def seed2vec(seed, G_z_dim = 512):
+  return np.random.RandomState(seed).randn(1, G_z_dim)
 
 def interpolate_ease_inout(z1, z2, num_interp, ease_fn, model_type='freeform'):
     # this is a "first frame included, last frame excluded" interpolation
     w = ease_fn(start=0, end=1, duration=num_interp+1)
     interp_zs = []
 
-    # just to make sure the latent vectors in the right shape
+    # just to make sure the latent vector's in the right shape
     if model_type == 'freeform':
         z1 = z1.view(1, -1)
         z2 = z2.view(1, -1)
@@ -61,7 +60,7 @@ def interpolate_ease_inout(z1, z2, num_interp, ease_fn, model_type='freeform'):
     return interp_zs
 
 @torch.no_grad()
-def net_generate(netG, z, model_type='freeform', im_size=1024):
+def net_generate(netG, z, model_type='freeform', im_size=512):
     
     if model_type == 'stylegan2':
         z_contents = []
@@ -85,20 +84,20 @@ def batch_generate_and_save(netG, zs, folder_name, batch_size=1, model_type='fre
     if len(zs) < batch_size:
         gimgs = net_generate(netG, zs, model_type, im_size=im_size).cpu()
         for image in gimgs:
-            vutils.save_image( image.add(1).mul(0.5), folder_name+"/%d.jpg"%(num) )
+            vutils.save_image( image.add(1).mul(0.5), folder_name+"/%d.png"%(num) )
             num += 1
 
     for k in tqdm(range(len(zs)//batch_size)):
         gimgs = net_generate(netG, zs[k*batch_size:(k+1)*batch_size], model_type, im_size=im_size)
         for image in gimgs:
-            vutils.save_image( image.add(1).mul(0.5), folder_name+"/%d.jpg"%(num) )
+            vutils.save_image( image.add(1).mul(0.5), folder_name+"/%d.png"%(num) )
             num += 1
         t = k
 
     if len(zs)%batch_size>0:
         gimgs = net_generate(netG, zs[(t+1)*batch_size:], model_type, im_size=im_size)        
         for image in gimgs:
-            vutils.save_image( image.add(1).mul(0.5), folder_name+"/%d.jpg"%(num) )
+            vutils.save_image( image.add(1).mul(0.5), folder_name+"/%d.png"%(num) )
             num += 1
 
 
@@ -107,7 +106,7 @@ def batch_save(images, folder_name, start_num=0):
     os.makedirs(folder_name, exist_ok=True)
     num = start_num
     for image in images:
-        vutils.save_image( image.add(1).mul(0.5), folder_name+"/%d.jpg"%(num) )
+        vutils.save_image( image.add(1).mul(0.5), folder_name+"/%d.png"%(num) )
         num += 1
 
 
@@ -115,7 +114,7 @@ def read_img_and_make_video(dist, video_name, fps):
     img_array = []
     for i in tqdm(range(len(os.listdir(dist)))):
         try:
-            filename = dist+'/%d.jpg'%(i)
+            filename = dist+'/%d.png'%(i)
             img = cv2.imread(filename)
             height, width, layers = img.shape
             size = (width,height)
@@ -132,7 +131,7 @@ def read_img_and_make_video(dist, video_name, fps):
 
 from shutil import rmtree
 
-def make_video_from_latents(net, selected_latents, frames_dist_folder, video_name, fps, video_length, ease_fn, model_type, im_size=1024):
+def make_video_from_latents(net, selected_latents, frames_dist_folder, video_name, fps, video_length, ease_fn, model_type, im_size=512):
     # selected_latents: the latent noise of user selected key-frame images, it is a list
     # each item in the list is a vector if the model is freeform, 
     # each item in the list is a list of two vectors if the model is stylegan2
@@ -156,7 +155,7 @@ def make_video_from_latents(net, selected_latents, frames_dist_folder, video_nam
     main_zs = []
     for idx in range(nbr_keyframe-1):
         main_zs += interpolate_ease_inout(selected_latents[idx], 
-                            selected_latents[idx+1], nbr_interpolation, ease_fn, model_type)
+            selected_latents[idx+1], nbr_interpolation, ease_fn, model_type)
     
 
     print('generating images ...')
@@ -164,32 +163,49 @@ def make_video_from_latents(net, selected_latents, frames_dist_folder, video_nam
     print('making videos ...')
     read_img_and_make_video(frames_dist_folder, video_name, fps=fps)
 
+@click.command()
+@click.pass_context
+@click.option('--ckpt', help='Path to checkpoint file')
+@click.option('--model_type', help='Model type', type=click.Choice(['stylegan2', 'freeform']), default='freeform')
+@click.option('--im_size', help='Image size', default=512)
+@click.option('--seeds', help='''Comma separated list of seeds 'a,b,c' ''')
+def generate_video(
+    ctx: click.Context,
+    ckpt: str,
+    model_type: str,
+    im_size: int,
+    seeds: str
+):
+    if ckpt is None:
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
+        ckpt = dir + os.listdir(dir)[-1]
+    print('checkpoint path is ' + ckpt)
+    if not os.path.exists(ckpt):
+        ctx.fail('ckpt file at '+ ckpt +' does not exist')
 
-if __name__ == "__main__":
     device = torch.device('cuda')
 
     from models import Generator as Generator_freeform
     
     frames_dist_folder = 'generated_video_frames' # a folder to save generated images
-    
-    dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
-    ckpt_path = dir + os.listdir(dir)[-1]
-    print('checkpoint path is ' + ckpt_path)
-    assert os.path.exists(ckpt_path), 'path does not exist'
 
     video_name = 'generated_video'  # name of the generated video
+    noise_dim = 256
+    #BEGIN ASSUMPTION: FREEFORM MODEL 
+    if model_type == 'freeform':
+        net = Generator_freeform(ngf=64, nz=noise_dim, nc=3, im_size=512)
+        ### replaced this line with next three from eval.py
+        # net.load_state_dict(torch.load(ckpt_path)['g'])
+        checkpoint = torch.load(ckpt, map_location=lambda a,b: a)
+        checkpoint['g'] = {k.replace('module.', ''): v for k, v in checkpoint['g'].items()}
+        net.load_state_dict(checkpoint['g'])
 
-    model_type = 'freeform'
-    net = Generator_freeform(ngf=64, nz=256, nc=3, im_size=512)
-
-    ### replaced this line with next three from eval.py
-    # net.load_state_dict(torch.load(ckpt_path)['g'])
-    checkpoint = torch.load(ckpt_path, map_location=lambda a,b: a)
-    checkpoint['g'] = {k.replace('module.', ''): v for k, v in checkpoint['g'].items()}
-    net.load_state_dict(checkpoint['g'])
-
-    net.to(device)
-    net.eval()
+        net.to(device)
+        net.eval()
+    #Only for stylegan2 models which do not work yet
+    # else:
+    #     with dnnlib.util.open_url(ckpt) as f:
+    #         net = legacy.load_network_pkl(f)['G_ema'].to(device)
 
     try:
         rmtree(frames_dist_folder)
@@ -198,32 +214,32 @@ if __name__ == "__main__":
     os.makedirs(frames_dist_folder, exist_ok=True)
 
     fps = 30
-    minutes = 1
-    im_size = 512
+    steps = 30
     
     ease_fn=ease_fn_dict['SineEaseInOut']
 
-    init_kf_nbr = 2
-    nbr_key_frames_per_minute = [init_kf_nbr - i for i in range(minutes)]
-    nbr_key_frames_total = sum(nbr_key_frames_per_minute)
-    noises = torch.randn(nbr_key_frames_total , 256).to(device)
-    user_selected_noises = [n for n in noises]
-    ##INSERT MY OWN NOISES HERE
-
-    nbr_interpolation_list = [[fps*60//nbr_kf]*nbr_kf for nbr_kf in nbr_key_frames_per_minute]
-    nbl = []
-    for nb in nbr_interpolation_list:
-        nbl += nb
-
-    print(len(nbl)) 
-    print(len(user_selected_noises))# , print("mismatch size")
+    ##INSERT SEEDED NOISES
+    if seeds is None:
+        noises = torch.randn(len(seeds), 256).to(device)
+        user_selected_noises = [n for n in noises]
+    else:
+        seeds = [int(x) for x in seeds.split(',')]
+        user_selected_noises = [seed for seed in seeds]
+        for i, seed in enumerate(seeds):
+            user_selected_noises[i] = torch.tensor(seed2vec(seed, noise_dim), dtype=torch.float32).to(device)
+    
+    nbl = [steps]*len(seeds)
+ 
     main_zs = []
     for idx in range(len(user_selected_noises)-1):
         main_zs += interpolate_ease_inout(user_selected_noises[idx], 
                             user_selected_noises[idx+1], nbl[idx], ease_fn, model_type)
-    for idx in range(100):
-        main_zs.append(main_zs[-1])
+    #duplicate the last frame
+    main_zs.append(main_zs[-1])
     print('generating images ...')
     batch_generate_and_save(net, main_zs, folder_name=frames_dist_folder, batch_size=1, model_type=model_type, im_size=im_size)
     print('making videos ...')
     read_img_and_make_video(frames_dist_folder, video_name, fps=fps)
+
+if __name__ == "__main__":
+    generate_video()

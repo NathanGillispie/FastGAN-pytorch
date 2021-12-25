@@ -1,5 +1,7 @@
 # training results (they are far to large for my low bandwidth connection and change far too often as well
 training_results/
+eval_imgs/
+generated_video_frames/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

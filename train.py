@@ -193,8 +193,13 @@ if __name__ == "__main__":
 
     if args.ckpt is None:
         dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
-        args.ckpt = dir + os.listdir(dir)[-1]
+        ckpt_file = os.listdir(dir)[-1]
+        args.ckpt = dir + ckpt_file
         print('warning: ckpt is defaulting to ' + args.ckpt)
     assert os.path.exists(args.ckpt), 'checkpoint path does not exist'
+
+    args.start_iter = int(ckpt_file.partition('_')[-1].partition('.')[0])
+    args.iter = args.start_iter + 10000
+
     print(args)
     train(args)

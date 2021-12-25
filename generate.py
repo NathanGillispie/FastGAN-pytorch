@@ -106,7 +106,7 @@ def generate_images(
             g_imgs = F.interpolate(g_imgs, 512)
             for j, g_img in enumerate( g_imgs ):
                 vutils.save_image(g_img.add(1).mul(0.5), 
-                    os.path.join(dist, '%d.png'%(i*batch+j)))#, normalize=True, range=(-1,1))
+                    os.path.join(dist, f'seed-{seeds[i]}.png'))#, normalize=True, range=(-1,1))
 
 
 if __name__ == "__main__":
