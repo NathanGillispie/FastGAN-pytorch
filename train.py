@@ -52,7 +52,7 @@ def train_d(net, data, label="real"):
         return pred.mean().item()
 
 def train(args):
-
+    delete_old_ckpts = True
     data_root = args.path
     total_iterations = args.iter
     checkpoint = args.ckpt
@@ -67,7 +67,7 @@ def train(args):
     multi_gpu = False       
     dataloader_workers = 3
     current_iteration = args.start_iter
-    save_interval = 10
+    save_interval = 5
     saved_model_folder, saved_image_folder = get_dir(args)
     
     device = torch.device("cpu")
@@ -115,7 +115,7 @@ def train(args):
     optimizerG = optim.Adam(netG.parameters(), lr=nlr, betas=(nbeta1, 0.999))
     optimizerD = optim.Adam(netD.parameters(), lr=nlr, betas=(nbeta1, 0.999))
 
-    if checkpoint != 'None':
+    if checkpoint != None:
         ckpt = torch.load(checkpoint)
         netG.load_state_dict(ckpt['g'])
         netD.load_state_dict(ckpt['d'])
@@ -157,7 +157,7 @@ def train(args):
         if iteration % 100 == 0:
             print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
 
-        if iteration % (save_interval*10) == 0:
+        if iteration % (save_interval*50) == 0:
             backup_para = copy_G_params(netG)
             load_params(netG, avg_param_G)
             with torch.no_grad():
@@ -178,21 +178,39 @@ def train(args):
                         'g_ema': avg_param_G,
                         'opt_g': optimizerG.state_dict(),
                         'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
+            if delete_old_ckpts:
+                model_filenames = os.listdir(saved_model_folder)
+                part_model_filenames = []
+                all_model_filenames = []
+                for file in model_filenames:
+                    if file == file.split('_')[0]:
+                        part_model_filenames += [file]
+                    else:
+                        all_model_filenames += [file]
+
+                while len(part_model_filenames) > 5:
+                    os.remove(saved_model_folder + '/' + part_model_filenames[0])
+                    part_model_filenames.pop(0)
+
+                while len(all_model_filenames) > 5:
+                    os.remove(saved_model_folder + '/' + all_model_filenames[0])
+                    all_model_filenames.pop(0)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='region gan')
-    parser.add_argument('--path', type=str, default='C:/Users/natha/datasets/TornadoGAN', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
+    parser.add_argument('--path', type=str, default='C:/Users/natha/datasets/NathanGAN', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
     parser.add_argument('--cuda', type=int, default=1, help='index of gpu to use')
-    parser.add_argument('--name', type=str, default='TornadoGAN', help='experiment name')
-    parser.add_argument('--iter', type=int, default=25500, help='number of iterations')
-    parser.add_argument('--start_iter', type=int, default=15500, help='the iteration to start training')
+    parser.add_argument('--name', type=str, default='NathanGAN', help='experiment name')
+    parser.add_argument('--iter', type=int, default=50000, help='number of iterations')
+    parser.add_argument('--start_iter', type=int, default=0, help='the iteration to start training')
     parser.add_argument('--batch_size', type=int, default=1, help='mini batch number of images')
     parser.add_argument('--im_size', type=int, default=512, help='image resolution')
     parser.add_argument('--ckpt', type=str, help='checkpoint weight path if have one')
     args = parser.parse_args()
 
     if args.ckpt is None:
-        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/NathanGAN/models/'
         ckpt_file = os.listdir(dir)[-1]
         args.ckpt = dir + ckpt_file
         print('warning: ckpt is defaulting to ' + args.ckpt)

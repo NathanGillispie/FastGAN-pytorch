@@ -61,12 +61,10 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--batch', type=int, default=64)
+    parser.add_argument('--batch', type=int, default=1, help='mini-batch size')
     parser.add_argument('--size', type=int, default=256)
-    parser.add_argument('--path_a', type=str)
-    parser.add_argument('--path_b', type=str)
-    parser.add_argument('--iter', type=int, default=3)
-    parser.add_argument('--end', type=int, default=13)
+    parser.add_argument('--path_a', type=str, default='C:/Users/natha/datasets/TornadoGAN/') #path to training dataset?
+    parser.add_argument('--path_b', type=str, default='C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/') #path to models?
     parser.add_argument('--num_workers', type=int, default=3)
 
     args = parser.parse_args()
@@ -91,20 +89,25 @@ if __name__ == '__main__':
     real_mean = np.mean(features_a, 0)
     real_cov = np.cov(features_a, rowvar=False)
     
-    #for folder in os.listdir(args.path_b):
-    for folder in range(args.iter,args.end+1):
-        folder = 'eval_%d'%(folder*10000)
-        if os.path.exists(os.path.join( args.path_b, folder )):
-            print(folder)
-            dset_b = ImageFolder( os.path.join( args.path_b, folder ), transform)
-            loader_b = DataLoader(dset_b, batch_size=args.batch, num_workers=args.num_workers)
+    model_filenames = os.listdir(args.path_b)
+    all_model_filenames = []
+    for file in model_filenames:
+        if 'all' == file.split('_')[0]:
+            all_model_filenames += [file]
 
+    for model in all_model_filenames:
+        if os.path.exists(os.path.join( args.path_b, model)):
+            print("calculating fid for model " + model)
+            dset_b = ImageFolder( os.path.join( args.path_b, model), transform)
+            loader_b = DataLoader(dset_b, batch_size=args.batch, num_workers=args.num_workers)
+            
             features_b = extract_features(loader_b, inception, device).numpy()
             print(f'extracted {features_b.shape[0]} features')
-
+            
             sample_mean = np.mean(features_b, 0)
             sample_cov = np.cov(features_b, rowvar=False)
-
+            
             fid = calc_fid(sample_mean, sample_cov, real_mean, real_cov)
+            
+            print(' fid:', fid)
 
-            print(folder, ' fid:', fid)

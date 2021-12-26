@@ -178,7 +178,7 @@ def generate_video(
 ):
     if ckpt is None:
         dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
-        ckpt = dir + os.listdir(dir)[-1]
+        ckpt = dir + os.listdir(dir)[0]
     print('checkpoint path is ' + ckpt)
     if not os.path.exists(ckpt):
         ctx.fail('ckpt file at '+ ckpt +' does not exist')

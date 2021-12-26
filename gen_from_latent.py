@@ -53,23 +53,25 @@ def num_range(s: str) -> List[int]:
 @click.pass_context
 @click.option('--ckpt', help='path to checkpoint file')
 @click.option('--save_dir', type=str, help='defaults to eval_imgs')
-@click.option('--batch', type=int, help='number of photos to process at a time', default=1)
 @click.option('--im_size', type=int, default=512)
-@click.option('--seeds', type=num_range, help='List of random seeds')
+@click.option('--latent_vec', type=str, help='path to latent vector')
 def generate_images(
     ctx: click.Context,
-    seeds: Optional[List[int]],
     ckpt: str,
     save_dir: str,
-    batch: int,
-    im_size: int
+    im_size: int,
+    latent_vec: str
 ):
-    if seeds is None:
-        ctx.fail('--seeds option is required')
-    n_sample = len(seeds)
+    if latent_vec is None:
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/test1/models/'
+        latent_vec = dir + os.listdir(dir)[-1]
+        print('warning: latent_vec is defaulting to ' + latent_vec)
+    if not os.path.exists(latent_vec):
+        ctx.fail('latent_vec path does not exist')
+
 
     if ckpt is None:
-        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/NathanGAN/models/'
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
         ckpt = dir + os.listdir(dir)[0]
         print('warning: ckpt is defaulting to ' + ckpt)
     if not os.path.exists(ckpt):
@@ -100,13 +102,13 @@ def generate_images(
     os.makedirs(dist, exist_ok=True)
 
     with torch.no_grad():
-        for i in tqdm(range(n_sample//batch)):
-            z = torch.tensor(seed2vec(seeds[i], batch, noise_dim), dtype=torch.float32).to(device)
-            g_imgs = net_ig(z)[0]
-            g_imgs = F.interpolate(g_imgs, 512)
-            for j, g_img in enumerate( g_imgs ):
-                vutils.save_image(g_img.add(1).mul(0.5), 
-                    os.path.join(dist, f'seed-{seeds[i]}.png'))#, normalize=True, range=(-1,1))
+        z = torch.load(latent_vec, map_location=lambda a,b: a).to(device)
+        g_imgs = net_ig(z)[0]
+        g_imgs = F.interpolate(g_imgs, 512)
+        for j, g_img in enumerate( g_imgs ):
+            vutils.save_image(g_img.add(1).mul(0.5), 
+                os.path.join(dist, f'latent_gen.png'))#, normalize=True, range=(-1,1))
+
 
 if __name__ == "__main__":
     generate_images()

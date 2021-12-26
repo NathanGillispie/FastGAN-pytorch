@@ -72,7 +72,7 @@ def train(args):
     use_cuda = True
     dataloader_workers = 3
     current_iteration = 0
-    save_interval = 10
+    save_interval = 20
     saved_model_folder, saved_image_folder = get_dir(args)
     
     device = torch.device("cpu")
@@ -132,7 +132,7 @@ def train(args):
                 vutils.save_image( torch.cat([
                         real_image, g_image]).add(1).mul(0.5), saved_image_folder+'/rec_%d.jpg'%iteration )
 
-                interpolate(fixed_noise[0], fixed_noise[1], netG, saved_image_folder+'/interpolate_0_1_%d.jpg'%iteration)
+        #         interpolate(fixed_noise[0], fixed_noise[1], netG, saved_image_folder+'/interpolate_0_1_%d.jpg'%iteration)
         
         if iteration % (save_interval*5) == 0 or iteration == total_iterations:
             torch.save(fixed_noise, saved_model_folder+'/%d.pth'%iteration)
@@ -142,14 +142,14 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='region gan')
 
-    parser.add_argument('--path', type=str, default='../lmdbs/art_landscape_1k', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
+    parser.add_argument('--path', type=str, default='./unseen_images/', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
     parser.add_argument('--cuda', type=int, default=0, help='index of gpu to use')
     parser.add_argument('--name', type=str, default='test1', help='experiment name')
-    parser.add_argument('--iter', type=int, default=50000, help='number of iterations')
+    parser.add_argument('--iter', type=int, default=2000, help='number of iterations')
     parser.add_argument('--start_iter', type=int, default=0, help='the iteration to start training')
-    parser.add_argument('--batch_size', type=int, default=8, help='mini batch number of images')
-    parser.add_argument('--im_size', type=int, default=1024, help='image resolution')
-    parser.add_argument('--ckpt', type=str, default='None', help='checkpoint weight path')
+    parser.add_argument('--batch_size', type=int, default=1, help='mini batch number of images')
+    parser.add_argument('--im_size', type=int, default=512, help='image resolution')
+    parser.add_argument('--ckpt', type=str, default='./train_results/TornadoGAN/models/all_50000.pth', help='checkpoint weight path')
 
 
     args = parser.parse_args()

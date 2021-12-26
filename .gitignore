@@ -1,7 +1,10 @@
 # training results (they are far to large for my low bandwidth connection and change far too often as well
-training_results/
+train_results/
 eval_imgs/
 generated_video_frames/
+
+# encoded videos from my latent space walks
+*.mp4
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
