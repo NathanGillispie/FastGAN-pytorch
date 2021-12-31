@@ -1,7 +1,9 @@
 # training results (they are far to large for my low bandwidth connection and change far too often as well
-train_results/
-eval_imgs/
+train_results/*
 generated_video_frames/
+
+# Listen, I'm not saying I'm not hot, but if people are gonna see me, I'd rather it not be on a GitHub repository ... 
+*_me.png
 
 # encoded videos from my latent space walks
 *.mp4

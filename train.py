@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 from torchvision import utils as vutils
-
+import numpy.random as nprand
 import argparse
 import random
 from tqdm import tqdm
@@ -51,6 +51,9 @@ def train_d(net, data, label="real"):
         err.backward()
         return pred.mean().item()
 
+def seed2vec(seed, batch_size, noise_dim):
+    return nprand.RandomState(seed).randn(batch_size, noise_dim)
+
 def train(args):
     delete_old_ckpts = True
     data_root = args.path
@@ -62,17 +65,16 @@ def train(args):
     ngf = 64
     nz = 256
     nlr = 0.0002
-    nbeta1 = 0.5
+    nbeta1 = 0.6
     use_cuda = False
-    multi_gpu = False       
-    dataloader_workers = 3
+    dataloader_workers = 4
     current_iteration = args.start_iter
-    save_interval = 5
+    save_interval = 1
     saved_model_folder, saved_image_folder = get_dir(args)
     
     device = torch.device("cpu")
     if use_cuda:
-        device = torch.device("cuda:0")
+        device = torch.device("cuda")
 
     transform_list = [
             transforms.Resize((int(im_size),int(im_size))),
@@ -88,15 +90,14 @@ def train(args):
     else:
         dataset = ImageFolder(root=data_root, transform=trans)
 
-    dataloader = iter(DataLoader(dataset, batch_size=batch_size, shuffle=False,
-                      sampler=InfiniteSamplerWrapper(dataset), num_workers=dataloader_workers, pin_memory=True))
+    dataloader = iter(DataLoader(dataset, batch_size=batch_size, shuffle=False, 
+                sampler=InfiniteSamplerWrapper(dataset), num_workers=dataloader_workers, pin_memory=True))
     '''
     loader = MultiEpochsDataLoader(dataset, batch_size=batch_size, 
                                shuffle=True, num_workers=dataloader_workers, 
                                pin_memory=True)
     dataloader = CudaDataLoader(loader, 'cuda')
     '''
-    
     
     #from model_s import Generator, Discriminator
     netG = Generator(ngf=ngf, nz=nz, im_size=im_size)
@@ -110,7 +111,7 @@ def train(args):
 
     avg_param_G = copy_G_params(netG)
 
-    fixed_noise = torch.FloatTensor(8, nz).normal_(0, 1).to(device)
+    fixed_noise = torch.tensor(seed2vec(69420, 8, nz), dtype=torch.float32).to(device)
     
     optimizerG = optim.Adam(netG.parameters(), lr=nlr, betas=(nbeta1, 0.999))
     optimizerD = optim.Adam(netD.parameters(), lr=nlr, betas=(nbeta1, 0.999))
@@ -125,99 +126,102 @@ def train(args):
         current_iteration = int(checkpoint.split('_')[-1].split('.')[0])
         del ckpt
     
-    for iteration in tqdm(range(current_iteration, total_iterations+1)):
-        real_image = next(dataloader)
-        real_image = real_image.to(device)
-        current_batch_size = real_image.size(0)
-        noise = torch.Tensor(current_batch_size, nz).normal_(0, 1).to(device)
+    with tqdm(total=total_iterations - current_iteration, ascii=True, smoothing=0.6) as pbar:
+        for iteration in range(current_iteration, total_iterations+1, batch_size):
+            real_image = next(dataloader)
+            real_image = real_image.to(device)
+            current_batch_size = real_image.size(0)
+            noise = torch.Tensor(current_batch_size, nz).normal_(0, 1).to(device)
 
-        fake_images = netG(noise)
+            fake_images = netG(noise)
 
-        real_image = DiffAugment(real_image, policy=policy)
-        fake_images = [DiffAugment(fake, policy=policy) for fake in fake_images]
-        
-        ## 2. train Discriminator
-        netD.zero_grad()
+            real_image = DiffAugment(real_image, policy=policy)
+            fake_images = [DiffAugment(fake, policy=policy) for fake in fake_images]
+            
+            ## 2. train Discriminator
+            netD.zero_grad()
 
-        err_dr, rec_img_all, rec_img_small, rec_img_part = train_d(netD, real_image, label="real")
-        train_d(netD, [fi.detach() for fi in fake_images], label="fake")
-        optimizerD.step()
-        
-        ## 3. train Generator
-        netG.zero_grad()
-        pred_g = netD(fake_images, "fake")
-        err_g = -pred_g.mean()
+            err_dr, rec_img_all, rec_img_small, rec_img_part = train_d(netD, real_image, label="real")
+            train_d(netD, [fi.detach() for fi in fake_images], label="fake")
+            optimizerD.step()
+            
+            ## 3. train Generator
+            netG.zero_grad()
+            pred_g = netD(fake_images, "fake")
+            err_g = -pred_g.mean()
 
-        err_g.backward()
-        optimizerG.step()
+            err_g.backward()
+            optimizerG.step()
 
-        for p, avg_p in zip(netG.parameters(), avg_param_G):
-            avg_p.mul_(0.999).add_(0.001 * p.data)
+            for p, avg_p in zip(netG.parameters(), avg_param_G):
+                avg_p.mul_(0.999).add_(0.001 * p.data)
 
-        if iteration % 100 == 0:
-            print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
+            if iteration % 1000 < batch_size:
+                print("\nGAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
 
-        if iteration % (save_interval*50) == 0:
-            backup_para = copy_G_params(netG)
-            load_params(netG, avg_param_G)
-            with torch.no_grad():
-                vutils.save_image(netG(fixed_noise)[0].add(1).mul(0.5), saved_image_folder+'/%d.jpg'%iteration, nrow=4)
-                vutils.save_image( torch.cat([
-                        F.interpolate(real_image, 128), 
-                        rec_img_all, rec_img_small,
-                        rec_img_part]).add(1).mul(0.5), saved_image_folder+'/rec_%d.jpg'%iteration )
-            load_params(netG, backup_para)
+            if iteration % (save_interval*200) < batch_size:
+                backup_para = copy_G_params(netG)
+                load_params(netG, avg_param_G)
+                with torch.no_grad():
+                    vutils.save_image(netG(fixed_noise)[0].add(1).mul(0.5), saved_image_folder+'/%d.jpg'%iteration, nrow=4)
+                    vutils.save_image( torch.cat([
+                            F.interpolate(real_image, 128), 
+                            rec_img_all, rec_img_small,
+                            rec_img_part]).add(1).mul(0.5), saved_image_folder+'/rec_%d.jpg'%iteration )
+                load_params(netG, backup_para)
 
-        if iteration % (save_interval*50) == 0 or iteration == total_iterations:
-            backup_para = copy_G_params(netG)
-            load_params(netG, avg_param_G)
-            torch.save({'g':netG.state_dict(),'d':netD.state_dict()}, saved_model_folder+'/%d.pth'%iteration)
-            load_params(netG, backup_para)
-            torch.save({'g':netG.state_dict(),
-                        'd':netD.state_dict(),
-                        'g_ema': avg_param_G,
-                        'opt_g': optimizerG.state_dict(),
-                        'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
-            if delete_old_ckpts:
-                model_filenames = os.listdir(saved_model_folder)
-                part_model_filenames = []
-                all_model_filenames = []
-                for file in model_filenames:
-                    if file == file.split('_')[0]:
-                        part_model_filenames += [file]
-                    else:
-                        all_model_filenames += [file]
+            if iteration % (save_interval*200) < batch_size or iteration == total_iterations:
+                backup_para = copy_G_params(netG)
+                load_params(netG, avg_param_G)
+                torch.save({'g':netG.state_dict(),'d':netD.state_dict()}, saved_model_folder+'/%d.pth'%iteration)
+                load_params(netG, backup_para)
+                torch.save({'g':netG.state_dict(),
+                            'd':netD.state_dict(),
+                            'g_ema': avg_param_G,
+                            'opt_g': optimizerG.state_dict(),
+                            'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
+                if delete_old_ckpts:
+                    model_filenames = os.listdir(saved_model_folder)
+                    part_model_filenames = []
+                    all_model_filenames = []
+                    for file in model_filenames:
+                        if file == file.split('_')[0]:
+                            part_model_filenames += [file]
+                        else:
+                            all_model_filenames += [file]
 
-                while len(part_model_filenames) > 5:
-                    os.remove(saved_model_folder + '/' + part_model_filenames[0])
-                    part_model_filenames.pop(0)
+                    while len(part_model_filenames) > 5:
+                        os.remove(saved_model_folder + '/' + part_model_filenames[0])
+                        part_model_filenames.pop(0)
 
-                while len(all_model_filenames) > 5:
-                    os.remove(saved_model_folder + '/' + all_model_filenames[0])
-                    all_model_filenames.pop(0)
+                    while len(all_model_filenames) > 5:
+                        os.remove(saved_model_folder + '/' + all_model_filenames[0])
+                        all_model_filenames.pop(0)
+
+            pbar.update(batch_size)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='region gan')
     parser.add_argument('--path', type=str, default='C:/Users/natha/datasets/NathanGAN', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
     parser.add_argument('--cuda', type=int, default=1, help='index of gpu to use')
-    parser.add_argument('--name', type=str, default='NathanGAN', help='experiment name')
+    parser.add_argument('--name', type=str, default='NathanGAN2', help='experiment name')
     parser.add_argument('--iter', type=int, default=50000, help='number of iterations')
     parser.add_argument('--start_iter', type=int, default=0, help='the iteration to start training')
-    parser.add_argument('--batch_size', type=int, default=1, help='mini batch number of images')
-    parser.add_argument('--im_size', type=int, default=512, help='image resolution')
+    parser.add_argument('--batch_size', type=int, default=8, help='mini batch number of images')
+    parser.add_argument('--im_size', type=int, default=1024, help='image resolution')
     parser.add_argument('--ckpt', type=str, help='checkpoint weight path if have one')
     args = parser.parse_args()
 
     if args.ckpt is None:
-        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/NathanGAN/models/'
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/NathanGAN2/models/'
         ckpt_file = os.listdir(dir)[-1]
         args.ckpt = dir + ckpt_file
         print('warning: ckpt is defaulting to ' + args.ckpt)
     assert os.path.exists(args.ckpt), 'checkpoint path does not exist'
 
     args.start_iter = int(ckpt_file.partition('_')[-1].partition('.')[0])
-    args.iter = args.start_iter + 10000
+    args.iter = args.start_iter + 4600
 
     print(args)
     train(args)

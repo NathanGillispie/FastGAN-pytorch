@@ -54,7 +54,7 @@ def num_range(s: str) -> List[int]:
 @click.option('--ckpt', help='path to checkpoint file')
 @click.option('--save_dir', type=str, help='defaults to eval_imgs')
 @click.option('--batch', type=int, help='number of photos to process at a time', default=1)
-@click.option('--im_size', type=int, default=512)
+@click.option('--im_size', type=int, default=1024)
 @click.option('--seeds', type=num_range, help='List of random seeds')
 def generate_images(
     ctx: click.Context,
@@ -69,8 +69,8 @@ def generate_images(
     n_sample = len(seeds)
 
     if ckpt is None:
-        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/NathanGAN/models/'
-        ckpt = dir + os.listdir(dir)[0]
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/NathanGAN2/models/'
+        ckpt = dir + os.listdir(dir)[-1]
         print('warning: ckpt is defaulting to ' + ckpt)
     if not os.path.exists(ckpt):
         ctx.fail('checkpoint path does not exist')
@@ -89,8 +89,8 @@ def generate_images(
     # Remove prefix `module`.
     checkpoint['g'] = {k.replace('module.', ''): v for k, v in checkpoint['g'].items()}
     net_ig.load_state_dict(checkpoint['g'])
-    #load_params(net_ig, checkpoint['g_ema'])
-    #net_ig.eval()
+    load_params(net_ig, checkpoint['g_ema']) # Looks more realistic with
+    #net_ig.eval() # Looks a little more uncanny/noisy with 
     print('load checkpoint success')
     net_ig.to(device)
 

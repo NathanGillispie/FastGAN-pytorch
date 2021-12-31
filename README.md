@@ -4,6 +4,13 @@ The official pytorch implementation of the paper "Towards Faster and Stabilized 
 ## Fork Info
 Most changes will be made for the sake of convenience for me. Lots of comparing and refactoring is done with the StyleGAN2-ada-pytorch code in sight and in mind.
 
+ - Old command line parser is being updated to the click system.
+ - Added a jupyter notebook for use with Google Colab.
+ - .py for generating images directly from a latent vector.
+ - eval.py changed to generate.py now using seeds to generate random latent vectors takes a list of seeds or range of seeds.
+ - train.py uses seeds for fixed_noise so pausing and resuming training keeps the same latent vectors for the generated images folder.
+ - Added latent_walk.py which generates a video for an interpolation between a list of seeds.
+
 ## 0. Data
 The datasets used in the paper can be found at [this link](https://drive.google.com/file/d/1aAJCZbXNHyraJ6Mi13dSbe7pTyfPXha0/view?usp=sharing). 
 

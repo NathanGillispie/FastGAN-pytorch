@@ -1,15 +1,10 @@
-from typing import List, Optional
+from typing import List
 import re
 import torch
-from torch import nn
-from torch import optim
 import torch.nn.functional as F
-from torchvision.datasets import ImageFolder
-from torch.utils.data import DataLoader
 from torchvision import utils as vutils
 import numpy as np
 import os
-import random
 import click
 from tqdm import tqdm
 
@@ -53,7 +48,7 @@ def num_range(s: str) -> List[int]:
 @click.pass_context
 @click.option('--ckpt', help='path to checkpoint file')
 @click.option('--save_dir', type=str, help='defaults to eval_imgs')
-@click.option('--im_size', type=int, default=512)
+@click.option('--im_size', type=int, default=1024)
 @click.option('--latent_vec', type=str, help='path to latent vector')
 def generate_images(
     ctx: click.Context,
@@ -63,7 +58,7 @@ def generate_images(
     latent_vec: str
 ):
     if latent_vec is None:
-        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/test1/models/'
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/nathanjack/models/'
         latent_vec = dir + os.listdir(dir)[-1]
         print('warning: latent_vec is defaulting to ' + latent_vec)
     if not os.path.exists(latent_vec):
@@ -71,14 +66,14 @@ def generate_images(
 
 
     if ckpt is None:
-        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/TornadoGAN/models/'
-        ckpt = dir + os.listdir(dir)[0]
+        dir = 'C:/Users/natha/repos/FastGAN-pytorch/train_results/NathanGAN2/models/'
+        ckpt = dir + os.listdir(dir)[-1]
         print('warning: ckpt is defaulting to ' + ckpt)
     if not os.path.exists(ckpt):
         ctx.fail('checkpoint path does not exist')
 
     if save_dir is None:
-        save_dir = './eval_imgs'
+        save_dir = './eval_imgs_from_latent'
     os.makedirs(save_dir, exist_ok=True)
 
     noise_dim = 256
@@ -91,8 +86,8 @@ def generate_images(
     # Remove prefix `module`.
     checkpoint['g'] = {k.replace('module.', ''): v for k, v in checkpoint['g'].items()}
     net_ig.load_state_dict(checkpoint['g'])
-    #load_params(net_ig, checkpoint['g_ema'])
-    #net_ig.eval()
+    load_params(net_ig, checkpoint['g_ema'])
+    net_ig.eval()
     print('load checkpoint success')
     net_ig.to(device)
 
